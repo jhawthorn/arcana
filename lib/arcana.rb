@@ -4,8 +4,12 @@ class Arcana
       @str = str
     end
 
-    def zero?
-      @str == "0"
+    def exact?
+      @str.match?(/\A[0-9]+\z/)
+    end
+
+    def position
+      Integer(@str)
     end
   end
 
@@ -19,8 +23,11 @@ class Arcana
     end
 
     def match?(input)
+      return if !input
       return if input.empty?
       flags = @flags.dup
+
+      return if @type.include?("&") # fixme
 
       case @type
       when "string", "ustring"
@@ -100,13 +107,21 @@ class Arcana
         return false # FIXME
       when "lestring16"
         return false # FIXME
+      when "default"
+        return false # FIXME
+      when "clear"
+        return false # FIXME
+      when "name"
+        return false # FIXME
       when "regex"
         if length = flags[0]
           if length.end_with?("l")
             # lines
             length = 8196
-          else
+          elsif length.match?(/\A[0-9]+\z/)
             length = Integer(length)
+          else
+            return false # FIXME
           end
         else
           length = 8196
@@ -142,19 +157,21 @@ class Arcana
   end
 
   class Rule
-    attr_reader :offset, :pattern, :message, :extras
+    attr_reader :offset, :pattern, :message, :extras, :children
 
     def initialize(offset, pattern, message)
       @offset = offset
       @pattern = pattern
       @message = message
       @extras = {}
+      @children = []
     end
 
     def match?(input)
       # FIXME: WIP
-      return false unless @offset.zero?
+      return false unless @offset.exact?
 
+      input = input[@offset.position..]
       @pattern.match?(input)
     end
   end
@@ -187,7 +204,7 @@ class Arcana
 
     def parse
       rules = []
-      last_rule = nil
+      stack = []
 
       ::File.foreach(@path) do |line|
         if line.start_with?("#")
@@ -196,29 +213,28 @@ class Arcana
           # blank
         elsif line.start_with?("!")
           if line =~ /\A!:([a-z]+)\s+(.*)\n\z/
-            next unless last_rule
-            last_rule.extras[$1] = $2
+            raise if stack.empty?
+            stack.last.extras[$1] = $2
           else
             raise "couldn't parse #{line}"
           end
         else
-          last_rule = nil
           fields = line.chomp.split(/(?<!\\)\s+/, 4)
           offset, type, test, message = fields
           nesting = offset[/\A>*/].size
 
-          # FIXME: very WIP
-          #next unless message
-          next if nesting > 0
-          next if type.include?("&")
-          next if type.start_with?("name")
-          next if type.start_with?("use")
+          stack = stack[0, nesting]
 
           offset = Offset.new offset[nesting..]
           pattern = Pattern.new(type, test)
 
-          last_rule = Rule.new(offset, pattern, message)
-          rules << last_rule
+          rule = Rule.new(offset, pattern, message)
+          if stack.empty?
+            rules << rule
+          else
+            stack.last.children << rule
+          end
+          stack << rule
         end
       end
       rules
