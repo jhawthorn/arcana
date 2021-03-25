@@ -1,3 +1,5 @@
+# encoding: binary
+#
 require "test_helper"
 
 class SimpleTest < Minitest::Test
@@ -8,6 +10,12 @@ class SimpleTest < Minitest::Test
   def test_can_detect_blank_gif
     data = "GIF89a\x01\x00\x01\x00\x80\x00\x00\xFF\xFF\xFF\x00\x00\x00!\xF9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".b
     rules = @db.open("images").rules
+    p rules.match(data)
+  end
+
+  def test_can_detect_empty_gzip
+    data = "\x1F\x8B\b\x00\xAE\x86\xE1[\x02\x03\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    rules = @db.open("compress").rules
     p rules.match(data)
   end
 end

@@ -19,7 +19,8 @@ class Arcana
     attr_reader :type, :flags, :value
 
     def initialize(type, value)
-      @type, *@flags = type.split("/")
+      type, *@flags = type.split("/")
+      @type, *@type_ops = type.split(/(?=[&%])/)
       @value = value
       @value = @value[1..] if @value.start_with?("=")
     end
@@ -28,9 +29,6 @@ class Arcana
       return if !input
       return if input.empty?
       flags = @flags.dup
-
-      return if @type.include?("&") # fixme
-      return if @type.include?("%") # fixme
 
       case @type
       when "string", "ustring"
@@ -44,7 +42,7 @@ class Arcana
 
         value = @value.dup.b
         value.gsub!("\\n", "\n")
-        value.gsub!(/\\([0-9]+)/) { |match| Integer($1, 10).chr(Encoding::UTF_8).b }
+        value.gsub!(/\\([0-7]{1,3})/) { |match| Integer($1, 8).chr rescue binding.irb }
         value.gsub!(/\\x([0-9a-fA-F]{2})/) { |match| Integer($1, 16).chr }
         value.gsub!(/\\(.)/, "\\1") # FIXME!!
 
@@ -92,9 +90,9 @@ class Arcana
       when "lestring16"
         return false # FIXME
       when "default"
-        return false # FIXME
+        return true # FIXME
       when "clear"
-        return false # FIXME
+        return true # FIXME
       when "name"
         return false # FIXME
       when "use"
@@ -143,9 +141,41 @@ class Arcana
     end
 
     def match_integer?(val)
+      return true if @value == "x"
       return false unless val
-      return false unless @value.match?(/\A[0-9]+\z/) # FIXME
-      val == Integer(@value)
+
+      @type_ops.each do |op|
+        op.match(/\A([&%])?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/) || raise
+        operand = Integer($2)
+        case $1
+        when "&"
+          val &= operand
+        when "%"
+          val %= operand
+        end
+      end
+
+      if @value.match(/\A([=><!&^])?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
+        operator = $1
+        comparison = Integer($2)
+        case operator
+        when "=", nil
+          val == comparison
+        when "<"
+          val < comparison
+        when ">"
+          val > comparison
+        when "!"
+          val != comparison
+        when "&"
+          (val & comparison) == comparison
+        when "^"
+          (val & comparison) == 0
+        end
+      else
+        binding.irb
+        false # FIXME
+      end
     end
   end
 
