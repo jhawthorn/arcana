@@ -53,10 +53,16 @@ class Arcana
         match_packed_integer?(input, "C", 1)
       when "short"
         match_packed_integer?(input, "s", 2)
+      when "ushort"
+        match_packed_integer?(input, "S", 2)
       when "long"
         match_packed_integer?(input, "l", 4)
+      when "ulong"
+        match_packed_integer?(input, "L", 4)
       when "quad"
         match_packed_integer?(input, "q", 8)
+      when "uquad"
+        match_packed_integer?(input, "Q", 8)
       when "leshort"
         match_packed_integer?(input, "s<", 2)
       when "uleshort"
@@ -115,15 +121,16 @@ class Arcana
         input[0,length].match?(regex)
       when "search"
         flags = @flags
-        flags = ["1"] if flags.empty? # FIXME: WTF?
-        search_input = input[0, @value.size + Integer(flags[0]) - 1]
-        flags = flags[1..]
 
         flags.delete("b") # force on binary files
         flags.delete("t") # force on text files 
 
         flags.delete("c") # FIXME: case insensitive
         flags.delete("C") # FIXME: case insensitive
+
+        flags = ["1"] if flags.empty? # FIXME: WTF?
+        search_input = input[0, @value.size + Integer(flags[0]) - 1]
+        flags = flags[1..]
 
         input.include?(@value)
       else
@@ -155,7 +162,7 @@ class Arcana
         end
       end
 
-      if @value.match(/\A([=><!&^])?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
+      if @value.match(/\A([=><!&^])? ?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
         operator = $1
         comparison = Integer($2)
         case operator
@@ -267,7 +274,7 @@ class Arcana
             raise "couldn't parse #{line}"
           end
         else
-          fields = line.chomp.split(/(?<!\\)\s+/, 4)
+          fields = line.chomp.split(/(?<![\\<>])\s+/, 4)
           offset, type, test, message = fields
           nesting = offset[/\A>*/].size
 
