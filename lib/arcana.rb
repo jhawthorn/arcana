@@ -50,62 +50,39 @@ class Arcana
 
         input.start_with?(value)
       when "byte"
-        input = input[0]
-        match_integer? input.unpack("c")[0]
+        match_packed_integer?(input, "c", 1)
       when "ubyte"
-        input = input[0]
-        match_integer? input.unpack("C")[0]
-      when "ubyte"
-        input = input[0]
-        match_integer? input.unpack("C")[0]
+        match_packed_integer?(input, "C", 1)
       when "short"
-        input = input[0,2]
-        match_integer? input.unpack("s")[0]
-      when "short"
-        input = input[0,2]
-        match_integer? input.unpack("s")[0]
+        match_packed_integer?(input, "s", 2)
       when "long"
-        input = input[0,4]
-        match_integer? input.unpack("l")[0]
+        match_packed_integer?(input, "l", 4)
       when "quad"
-        input = input[0,8]
-        match_integer? input.unpack("q")[0]
-      when "uleshort"
-        input = input[0,2]
-        match_integer? input.unpack("S<")[0]
+        match_packed_integer?(input, "q", 8)
       when "leshort"
-        input = input[0,2]
-        match_integer? input.unpack("s<")[0]
+        match_packed_integer?(input, "s<", 2)
+      when "uleshort"
+        match_packed_integer?(input, "S<", 2)
       when "beshort"
-        input = input[0,2]
-        match_integer? input.unpack("s>")[0]
+        match_packed_integer?(input, "s>", 2)
       when "ubeshort"
-        input = input[0,2]
-        match_integer? input.unpack("S>")[0]
+        match_packed_integer?(input, "S>", 2)
       when "lelong"
-        input = input[0,4]
-        match_integer? input.unpack("l<")[0]
+        match_packed_integer?(input, "l<", 4)
       when "ulelong"
-        input = input[0,4]
-        match_integer? input.unpack("L<")[0]
-      when "ubelong"
-        input = input[0,4]
-        match_integer? input.unpack("L>")[0]
+        match_packed_integer?(input, "L<", 4)
       when "belong"
-        input = input[0,4]
-        match_integer? input.unpack("l>")[0]
+        match_packed_integer?(input, "l>", 4)
+      when "ubelong"
+        match_packed_integer?(input, "L>", 4)
       when "bequad"
-        input = input[0,8]
-        match_integer? input.unpack("q>")[0]
-      when "lequad"
-        input = input[0,8]
-        match_integer? input.unpack("q<")[0]
-      when "ulequad"
-        input = input[0,8]
-        match_integer? input.unpack("Q<")[0]
+        match_packed_integer?(input, "q>", 8)
       when "ubequad"
-        input = input[0,8]
-        match_integer? input.unpack("Q>")[0]
+        match_packed_integer?(input, "Q>", 8)
+      when "lequad"
+        match_packed_integer?(input, "q<", 8)
+      when "ulequad"
+        match_packed_integer?(input, "Q<", 8)
       when "pstring"
         return false # FIXME
       when "guid"
@@ -157,6 +134,13 @@ class Arcana
     end
 
     private
+
+    def match_packed_integer?(input, pack_str, length)
+      input = input[0, length]
+      return false unless input.length == length
+      val = input.unpack(pack_str)[0]
+      match_integer?(val)
+    end
 
     def match_integer?(val)
       return false unless val
