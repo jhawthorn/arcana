@@ -1,4 +1,6 @@
 class Arcana
+  EMPTY_ARRAY = [].freeze
+
   class Offset
     def initialize(str)
       @str = str
@@ -28,6 +30,7 @@ class Arcana
       flags = @flags.dup
 
       return if @type.include?("&") # fixme
+      return if @type.include?("%") # fixme
 
       case @type
       when "string", "ustring"
@@ -39,9 +42,13 @@ class Arcana
         flags.delete("c") # FIXME: case insensitive
         flags.delete("C") # FIXME: case insensitive
 
-        #binding.irb if flags.any?
+        value = @value.dup.b
+        value.gsub!("\\n", "\n")
+        value.gsub!(/\\([0-9]+)/) { |match| Integer($1, 10).chr(Encoding::UTF_8).b }
+        value.gsub!(/\\x([0-9a-fA-F]{2})/) { |match| Integer($1, 16).chr }
+        value.gsub!(/\\(.)/, "\\1") # FIXME!!
 
-        input.start_with?(@value)
+        input.start_with?(value)
       when "byte"
         input = input[0]
         match_integer? input.unpack("c")[0]
@@ -113,6 +120,8 @@ class Arcana
         return false # FIXME
       when "name"
         return false # FIXME
+      when "use"
+        return false # FIXME
       when "regex"
         if length = flags[0]
           if length.end_with?("l")
@@ -157,22 +166,47 @@ class Arcana
   end
 
   class Rule
-    attr_reader :offset, :pattern, :message, :extras, :children
+    attr_reader :offset, :pattern, :message, :extras, :children, :parent
 
-    def initialize(offset, pattern, message)
+    def initialize(offset, pattern, message, parent)
       @offset = offset
       @pattern = pattern
       @message = message
       @extras = {}
+      @parent = parent
       @children = []
     end
 
-    def match?(input)
-      # FIXME: WIP
-      return false unless @offset.exact?
+    def match(original_input)
+      return EMPTY_ARRAY unless @offset.exact?
 
-      input = input[@offset.position..]
-      @pattern.match?(input)
+      input = original_input[@offset.position..]
+      if @pattern.match?(input)
+        child_matches = children.flat_map { |child| child.match(original_input) }
+        if child_matches.any?
+          child_matches
+        else
+          [self]
+        end
+      else
+        EMPTY_ARRAY
+      end
+    end
+
+    def mime_type
+      extras["mime"] || (parent && parent.mime_type)
+    end
+
+    def full_message
+      self_and_ancestors.map(&:message).compact.join
+    end
+
+    def self_and_ancestors
+      if parent
+        [*parent.self_and_ancestors, self]
+      else
+        [self]
+      end
     end
   end
 
@@ -182,9 +216,9 @@ class Arcana
     end
 
     def match(string)
-      @rules.select do |rule|
-        rule.match?(string)
-      end
+      @rules.flat_map do |rule|
+        rule.match(string)
+      end.map(&:mime_type)
     end
   end
 
@@ -228,7 +262,7 @@ class Arcana
           offset = Offset.new offset[nesting..]
           pattern = Pattern.new(type, test)
 
-          rule = Rule.new(offset, pattern, message)
+          rule = Rule.new(offset, pattern, message, stack.last)
           if stack.empty?
             rules << rule
           else
