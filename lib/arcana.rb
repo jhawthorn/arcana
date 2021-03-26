@@ -227,7 +227,7 @@ class Arcana
     end
 
     def inspect
-      "#<Arcana::Result>"
+      "#<Arcana::Result #{mime_type} #{full_message}>"
     end
   end
 
