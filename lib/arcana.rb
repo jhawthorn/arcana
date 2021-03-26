@@ -103,6 +103,8 @@ class Arcana
         return false # FIXME
       when "use"
         return false # FIXME
+      when "indirect"
+        return false # FIXME
       when "regex"
         if length = flags[0]
           if length.end_with?("l")
@@ -144,10 +146,10 @@ class Arcana
       input = input[0, length]
       return false unless input.length == length
       val = input.unpack(pack_str)[0]
-      match_integer?(val)
+      match_integer?(val, length*8)
     end
 
-    def match_integer?(val)
+    def match_integer?(val, bitwidth)
       return true if @value == "x"
       return false unless val
 
@@ -165,6 +167,14 @@ class Arcana
       if @value.match(/\A([=><!&^])? ?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
         operator = $1
         comparison = Integer($2)
+
+        if $2.start_with?("0x") && !@type.start_with?("u")
+          # is it signed?
+          if comparison.anybits?(1 << (bitwidth - 1))
+            comparison = -(((1 << bitwidth) - 1) ^ comparison) - 1
+          end
+        end
+
         case operator
         when "=", nil
           val == comparison
@@ -239,7 +249,7 @@ class Arcana
     def match(string)
       @rules.flat_map do |rule|
         rule.match(string)
-      end.map(&:mime_type)
+      end
     end
   end
 
