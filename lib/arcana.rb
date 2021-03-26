@@ -20,7 +20,7 @@ class Arcana
 
     def initialize(type, value)
       type, *@flags = type.split("/")
-      @type, *@type_ops = type.split(/(?=[&%])/)
+      @type, *@type_ops = type.split(/(?=[&%+-])/)
       @value = value
       @value = @value[1..] if @value.start_with?("=")
     end
@@ -100,10 +100,20 @@ class Arcana
       when "clear"
         return true # FIXME
       when "name"
-        return false # FIXME
+        return false
       when "use"
-        return false # FIXME
+        return false
       when "indirect"
+        return false # FIXME
+      when "ledate"
+        return false # FIXME
+      when "bedate"
+        return false # FIXME
+      when "beldate"
+        return false # FIXME
+      when "beqdate"
+        return false # FIXME
+      when "lefloat"
         return false # FIXME
       when "regex"
         if length = flags[0]
@@ -208,12 +218,17 @@ class Arcana
       @children = []
     end
 
-    def match(original_input)
+    def match(original_input, ruleset)
       return EMPTY_ARRAY unless @offset.exact?
+
+      if pattern.type == "use"
+        use = ruleset.names.fetch(pattern.value)
+        return use.children.flat_map { |child| child.match(original_input, ruleset) }
+      end
 
       input = original_input[@offset.position..]
       if @pattern.match?(input)
-        child_matches = children.flat_map { |child| child.match(original_input) }
+        child_matches = children.flat_map { |child| child.match(original_input, ruleset) }
         if child_matches.any?
           child_matches
         else
@@ -229,7 +244,7 @@ class Arcana
     end
 
     def full_message
-      self_and_ancestors.map(&:message).compact.join
+      self_and_ancestors.map(&:message).compact.join(" ")
     end
 
     def self_and_ancestors
@@ -248,8 +263,18 @@ class Arcana
 
     def match(string)
       @rules.flat_map do |rule|
-        rule.match(string)
+        rule.match(string, self)
       end
+    end
+
+    def names
+      return @names if defined?(@names)
+      @names = {}
+      @rules.each do |rule|
+        next unless rule.pattern.type == "name"
+        @names[rule.pattern.value] = rule
+      end
+      @names
     end
   end
 
