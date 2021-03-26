@@ -31,4 +31,12 @@ class SimpleTest < Minitest::Test
     p rules.match(data)
     pp rules.match(data).map(&:full_message)
   end
+
+  def test_can_detect_rtf
+    data = "{\\rtf1}"
+    rules = @db.open("rtf").rules
+    p rules.match(data)
+    pp rules.match(data).map(&:mime_type)
+    pp rules.match(data).map(&:full_message)
+  end
 end

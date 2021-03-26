@@ -206,6 +206,31 @@ class Arcana
     end
   end
 
+  class Result
+    attr_reader :ruleset
+
+    def initialize(ruleset, stack=[])
+      @ruleset = ruleset
+      @stack = stack
+    end
+
+    def add(rule)
+      Result.new(ruleset, @stack + [rule])
+    end
+
+    def mime_type
+      @stack.map(&:mime_type).compact.last
+    end
+
+    def full_message
+      @stack.map(&:message).compact.join(" ")
+    end
+
+    def inspect
+      "#<Arcana::Result>"
+    end
+  end
+
   class Rule
     attr_reader :offset, :pattern, :message, :extras, :children, :parent
 
@@ -218,21 +243,23 @@ class Arcana
       @children = []
     end
 
-    def match(original_input, ruleset)
+    def match(original_input, match)
       return EMPTY_ARRAY unless @offset.exact?
+      ruleset = match.ruleset
 
       if pattern.type == "use"
         use = ruleset.names.fetch(pattern.value)
-        return use.children.flat_map { |child| child.match(original_input, ruleset) }
+        return use.children.flat_map { |child| child.match(original_input, match) }
       end
 
       input = original_input[@offset.position..]
       if @pattern.match?(input)
-        child_matches = children.flat_map { |child| child.match(original_input, ruleset) }
+        match = match.add(self)
+        child_matches = children.flat_map { |child| child.match(original_input, match) }
         if child_matches.any?
           child_matches
         else
-          [self]
+          match
         end
       else
         EMPTY_ARRAY
@@ -240,19 +267,7 @@ class Arcana
     end
 
     def mime_type
-      extras["mime"] || (parent && parent.mime_type)
-    end
-
-    def full_message
-      self_and_ancestors.map(&:message).compact.join(" ")
-    end
-
-    def self_and_ancestors
-      if parent
-        [*parent.self_and_ancestors, self]
-      else
-        [self]
-      end
+      @extras["mime"]
     end
   end
 
@@ -263,7 +278,7 @@ class Arcana
 
     def match(string)
       @rules.flat_map do |rule|
-        rule.match(string, self)
+        rule.match(string, Result.new(self))
       end
     end
 
@@ -275,6 +290,10 @@ class Arcana
         @names[rule.pattern.value] = rule
       end
       @names
+    end
+
+    def inspect
+      "#<#{self.class} #{@rules.size} rules>"
     end
   end
 
