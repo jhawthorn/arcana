@@ -76,7 +76,7 @@ class Arcana
     def seek(input)
       pos = position(input)
       return if pos.nil? # FIXME: raise?
-      input.seek_absolute(pos)
+      input.seek_pos(pos)
     end
 
     def position(input)
@@ -400,9 +400,8 @@ class Arcana
         use = ruleset.names.fetch(pattern.value)
         input.restore do
           input.mark_base # FIXME: no idea if this works
-          return use.match(input, match)
+          return use.visit_children(input, match)
         end
-        #return use.visit_children(input, match)
       elsif pattern.type == "indirect"
         # FIXME: do this better
         original_input = input.buf

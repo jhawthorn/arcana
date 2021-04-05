@@ -70,4 +70,11 @@ class SimpleTest < Minitest::Test
     mime_types = rules.match(data).map(&:mime_type).uniq.compact
     assert_equal ["audio/mpeg"], mime_types
   end
+
+  def test_can_detect_flash
+    data = "FWS\a\x8C\x00\x00\x00x\x00\x05_\x00\x00\x0F\xA0\x00\x00\f\x01\x00?\x03m\x00\x00\x00\x88,\x00\x04\x00message\x00createTextField\x00text\x00Hello World!\x00\x96*\x00\a2\x00\x00\x00\ad\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\a\x01\x00\x00\x00\b\x00\a\x06\x00\x00\x00\b\x01=\x17\x96\x02\x00\b\x00\x1C\x96\x04\x00\b\x02\b\x03O\x00@\x00\x00\x00"
+    rules = @db.open("flash").rules
+    mime_types = rules.match(data).map(&:mime_type).uniq.compact
+    assert_equal ["application/x-shockwave-flash"], mime_types
+  end
 end
