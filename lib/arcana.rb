@@ -220,7 +220,7 @@ class Arcana
       when "use"
         return false
       when "offset"
-        return false
+        match_integer?(input.offset)
       when "indirect"
         return false # FIXME
       when "ledate"
@@ -293,11 +293,11 @@ class Arcana
       input = input.read(length)
       return false unless input && input.length == length
       val = input.unpack(pack_str)[0]
-      match_integer?(val, length*8)
+      match_integer?(val, bitwidth: length*8)
     end
 
-    def match_integer?(val, bitwidth)
-      return true if @value == "x"
+    def match_integer?(val, bitwidth: 64, match_value: @value)
+      return true if match_value == "x"
       return false unless val
 
       @type_ops.each do |op|
@@ -311,7 +311,7 @@ class Arcana
         end
       end
 
-      if @value.match(/\A([=><!&^])? ?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
+      if match_value.match(/\A([=><!&^])? ?(0x[0-9a-fA-F]+|-?[0-9]+)[lL]?\z/)
         operator = $1
         comparison = Integer($2)
 
@@ -398,7 +398,6 @@ class Arcana
       if pattern.type == "use"
         return EMPTY_ARRAY if pattern.value.start_with?("\\^") # FIXME: endianness swap
         use = ruleset.names.fetch(pattern.value)
-        puts "use at #{input.offset}"
         input.restore do
           input.mark_base # FIXME: no idea if this works
           return use.match(input, match)

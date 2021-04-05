@@ -31,8 +31,9 @@ class SimpleTest < Minitest::Test
   def test_can_detect_elf
     data = "\x7FELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x03\x00\x01\x00\x00\x00\x19@\xCD\x80,\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x004\x00 \x00\x01\x00\x00\x00\x00\x00\x00\x00\x00@\xCD\x80\x00@\xCD\x80L\x00\x00\x00L\x00\x00\x00\x05\x00\x00\x00\x00\x10\x00\x00"
     rules = @db.open("elf").rules
-    p rules.match(data)
-    pp rules.match(data).map(&:full_message)
+
+    # FIXME: missing mime type
+    assert_includes rules.match(data).map(&:full_message), "ELF 32-bit"
   end
 
   def test_can_detect_rtf
@@ -56,11 +57,11 @@ class SimpleTest < Minitest::Test
     assert_equal ["text/html"], mime_types
   end
 
-  def test_can_simple_svg
-    data = '<html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body/></html>'
+  def test_can_match_simple_svg
+    data = '<svg xmlns="http://www.w3.org/2000/svg"/>'
     rules = @db.open("sgml").rules
     mime_types = rules.match(data).map(&:mime_type).uniq.compact
-    assert_equal ["svg"], mime_types
+    assert_equal ["image/svg+xml"], mime_types
   end
 
   def test_can_simple_mp3
