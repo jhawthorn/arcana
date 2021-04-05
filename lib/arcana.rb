@@ -1,17 +1,120 @@
 class Arcana
   EMPTY_ARRAY = [].freeze
 
+  class Input
+    attr_reader :buf, :offset
+
+    def initialize(buf)
+      @buf = buf
+      @offset = 0
+    end
+
+    def eof?
+      @offset >= @buf.size
+    end
+
+    def read(n)
+      ret = peek(n)
+      seek_relative(n)
+      ret
+    end
+
+    def peek(n)
+      @buf[@offset, n]
+    end
+
+    def seek_absolute(offset)
+      if offset < 0
+        @offset = @buf.size + offset
+      else
+        @offset = offset
+      end
+    end
+
+    def seek_relative(offset)
+      @offset += offset
+    end
+
+    def restore
+      previous_offset = @offset
+      ret = yield
+      @offset = previous_offset
+      ret
+    end
+
+    def inspect
+      "#<#{self.class} offset=#{@offset}>"
+    end
+  end
+
   class Offset
     def initialize(str)
       @str = str
     end
 
     def exact?
-      @str.match?(/\A[0-9]+\z/)
+      @str.match?(/\A(?:-?[0-9]+|0x[0-9a-fA-F]+)\z/)
     end
 
-    def position
-      Integer(@str)
+    def indirect?
+      @str.start_with?("(")
+    end
+
+    def relative?
+      @str.start_with?("&")
+    end
+
+    def seek(input)
+      pos = position(input)
+      return if pos.nil? # FIXME: raise?
+      input.seek_absolute(pos)
+    end
+
+    def position(input)
+      if exact?
+        Integer(@str)
+      elsif indirect?
+        @str.match(/\A\(([0-9]+|0x[0-9a-fA-F]+)([.,])([bBcCeEfFgGhHiIlLmsSqQ])([+-](?:[0-9]+|0x[0-9a-fA-F]+))?\)\z/) || return
+        add = $4 ? Integer($4) : 0
+        value = read_indirect(input, offset: Integer($1), signed: ($2 == ","), type: $3)
+        return unless value # fixme
+        value + add
+      else
+        binding.irb
+      end
+    end
+
+    def to_s
+      @str
+    end
+
+    private
+
+    def read_indirect(input, offset:, type:, signed:)
+      input.seek_absolute(offset)
+      return if input.eof? # FIXME
+
+      case type
+      when "b", "c", "B", "c"
+        input.read(1).ord
+      when "h", "s"
+        input.read(2).unpack("s<")[0]
+      when "H", "S"
+        input.read(2).unpack("s>")[0]
+      when "l"
+        # also default?
+        input.read(2).unpack("l<")[0]
+      when "L"
+        # also default?
+        input.read(2).unpack("l>")[0]
+      when "I"
+        # https://stackoverflow.com/questions/5223025/why-do-mp3-files-use-synchsafe-integers
+        bytes = input.read(4).bytes
+        bytes[0] << 21 | bytes[1] << 14 | bytes[2] << 7 | bytes[3]
+      else
+        binding.irb
+        raise "unsupported indirect type: #{type}"
+      end
     end
   end
 
@@ -22,12 +125,13 @@ class Arcana
       type, *@flags = type.split("/")
       @type, *@type_ops = type.split(/(?=[&%+-])/)
       @value = value
-      @value = @value[1..] if @value.start_with?("=")
     end
 
     def match?(input)
+      return true if @value == "x"
+
       return if !input
-      return if input.empty?
+      return if input.eof?
       flags = @flags.dup
 
       case @type
@@ -40,13 +144,16 @@ class Arcana
         flags.delete("c") # FIXME: case insensitive
         flags.delete("C") # FIXME: case insensitive
 
-        value = @value.dup.b
-        value.gsub!("\\n", "\n")
-        value.gsub!(/\\([0-7]{1,3})/) { |match| Integer($1, 8).chr rescue binding.irb }
-        value.gsub!(/\\x([0-9a-fA-F]{2})/) { |match| Integer($1, 16).chr }
-        value.gsub!(/\\(.)/, "\\1") # FIXME!!
-
-        input.start_with?(value)
+        if @value.start_with?("!")
+          test_string = parse_string(@value[1..])
+          input.read(test_string.length) != test_string
+        elsif @value.start_with?("=")
+          test_string = parse_string(@value[1..])
+          input.read(test_string.length) == test_string
+        else
+          test_string = parse_string(@value)
+          input.read(test_string.length) == test_string
+        end
       when "byte"
         match_packed_integer?(input, "c", 1)
       when "ubyte"
@@ -128,9 +235,9 @@ class Arcana
         else
           length = 8196
         end
-        regex = @value
-        regex = regex.gsub(/\\(.)/, "\\1") # FIXME!!
-        input[0,length].match?(regex)
+        regex = parse_string(@value)
+        # FIXME: seek input to result location
+        input.peek(length).match?(regex)
       when "search"
         flags = @flags
 
@@ -141,10 +248,13 @@ class Arcana
         flags.delete("C") # FIXME: case insensitive
 
         flags = ["1"] if flags.empty? # FIXME: WTF?
-        search_input = input[0, @value.size + Integer(flags[0]) - 1]
+        search_input = input.peek(@value.size + Integer(flags[0]) - 1)
         flags = flags[1..]
 
-        input.include?(@value)
+        value = parse_string(@value)
+
+        # FIXME: seek input to result location
+        search_input.include?(value)
       else
         raise "Unsupported match type: #{@type}"
       end
@@ -152,9 +262,25 @@ class Arcana
 
     private
 
+    def parse_string(value)
+      value = value.dup.b
+      value.gsub!(/\\([0-7]{1,3})/) { |match| Integer($1, 8).chr rescue binding.irb }
+      value.gsub!(/\\x([0-9a-fA-F]{2})/) { |match| Integer($1, 16).chr }
+      value.gsub!(/\\(.)/) do
+        case $1
+        when "n" then "\n"
+        when "t" then "\t"
+        when "f" then "\f"
+        when "r" then "\r"
+        else $1
+        end
+      end
+      value
+    end
+
     def match_packed_integer?(input, pack_str, length)
-      input = input[0, length]
-      return false unless input.length == length
+      input = input.read(length)
+      return false unless input && input.length == length
       val = input.unpack(pack_str)[0]
       match_integer?(val, length*8)
     end
@@ -183,6 +309,10 @@ class Arcana
           if comparison.anybits?(1 << (bitwidth - 1))
             comparison = -(((1 << bitwidth) - 1) ^ comparison) - 1
           end
+        end
+
+        if @type_ops.any?
+          comparison &= (1 << bitwidth) - 1
         end
 
         case operator
@@ -226,36 +356,49 @@ class Arcana
       @stack.map(&:message).compact.join(" ")
     end
 
+    def last_rule
+      @stack.last
+    end
+
     def inspect
-      "#<Arcana::Result #{mime_type} #{full_message}>"
+      "#<Arcana::Result mime=#{mime_type.inspect} message=#{full_message.inspect} stack=#{@stack.inspect}>"
     end
   end
 
   class Rule
-    attr_reader :offset, :pattern, :message, :extras, :children, :parent
+    attr_reader :offset, :pattern, :message, :extras, :children
 
-    def initialize(offset, pattern, message, parent)
+    def initialize(offset, pattern, message)
       @offset = offset
       @pattern = pattern
       @message = message
       @extras = {}
-      @parent = parent
       @children = []
     end
 
-    def match(original_input, match)
-      return EMPTY_ARRAY unless @offset.exact?
+    def match(input, match)
+      return EMPTY_ARRAY if @offset.relative?
+      #return EMPTY_ARRAY unless @offset.exact?
       ruleset = match.ruleset
 
+      input = Input.new(input) unless Input === input
+      @offset.seek(input)
+
       if pattern.type == "use"
+        return EMPTY_ARRAY if pattern.value.start_with?("\\^") # FIXME: endianness swap
         use = ruleset.names.fetch(pattern.value)
-        return use.children.flat_map { |child| child.match(original_input, match) }
+        puts "use at #{input.offset}"
+        # FIXME: named needs to have offsets relative to this match
+        return use.visit_children(input, match)
+      elsif pattern.type == "indirect"
+        # FIXME: do this better
+        original_input = input.buf
+        return match.ruleset.match(original_input[input.offset..], match)
       end
 
-      input = original_input[@offset.position..]
       if @pattern.match?(input)
         match = match.add(self)
-        child_matches = children.flat_map { |child| child.match(original_input, match) }
+        child_matches = visit_children(input, match)
         if child_matches.any?
           child_matches
         else
@@ -266,8 +409,20 @@ class Arcana
       end
     end
 
+    def visit_children(input, match)
+      children.flat_map do |child|
+        input.restore do
+          child.match(input, match)
+        end
+      end
+    end
+
     def mime_type
       @extras["mime"]
+    end
+
+    def inspect
+      "<#{self.class} #{@offset} #{@pattern.inspect} #{@message}>"
     end
   end
 
@@ -276,9 +431,9 @@ class Arcana
       @rules = rules
     end
 
-    def match(string)
+    def match(string, result=Result.new(self))
       @rules.flat_map do |rule|
-        rule.match(string, Result.new(self))
+        rule.match(string, result)
       end
     end
 
@@ -337,7 +492,7 @@ class Arcana
           offset = Offset.new offset[nesting..]
           pattern = Pattern.new(type, test)
 
-          rule = Rule.new(offset, pattern, message, stack.last)
+          rule = Rule.new(offset, pattern, message)
           if stack.empty?
             rules << rule
           else
