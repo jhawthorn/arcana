@@ -104,7 +104,7 @@ class Arcana
       return if input.eof? # FIXME
 
       case type
-      when "b", "c", "B", "c"
+      when "b", "c", "B", "C"
         input.read(1).ord
       when "h", "s"
         input.read(2).unpack("s<")[0]
