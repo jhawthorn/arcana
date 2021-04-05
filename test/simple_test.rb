@@ -18,14 +18,14 @@ class SimpleTest < Minitest::Test
     data = "\x1F\x8B\b\x00\xAE\x86\xE1[\x02\x03\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00"
     rules = @db.open("compress").rules
     mime_types = rules.match(data).map(&:mime_type).uniq.compact
-    assert_equal ["gzip"], mime_types
+    assert_equal ["application/gzip"], mime_types
   end
 
   def test_can_detect_jpeg
     data = "\xFF\xD8\xFF\xDB\x00C\x00\x03\x02\x02\x02\x02\x02\x03\x02\x02\x02\x03\x03\x03\x03\x04\x06\x04\x04\x04\x04\x04\b\x06\x06\x05\x06\t\b\n\n\t\b\t\t\n\f\x0F\f\n\v\x0E\v\t\t\r\x11\r\x0E\x0F\x10\x10\x11\x10\n\f\x12\x13\x12\x10\x13\x0F\x10\x10\x10\xFF\xC9\x00\v\b\x00\x01\x00\x01\x01\x01\x11\x00\xFF\xCC\x00\x06\x00\x10\x10\x05\xFF\xDA\x00\b\x01\x01\x00\x00?\x00\xD2\xCF \xFF\xD9"
     rules = @db.open("jpeg").rules
     mime_types = rules.match(data).map(&:mime_type).uniq.compact
-    assert_equal ["jpeg"], mime_types
+    assert_equal ["image/jpeg"], mime_types
   end
 
   def test_can_detect_elf

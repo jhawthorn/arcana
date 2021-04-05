@@ -1,12 +1,12 @@
 class Arcana
   EMPTY_ARRAY = [].freeze
 
-  class Input
+  class Cursor
     attr_reader :buf, :offset
 
     def initialize(buf)
       @buf = buf
-      @offset = 0
+      @base = @offset = 0
     end
 
     def eof?
@@ -23,6 +23,11 @@ class Arcana
       @buf[@offset, n]
     end
 
+    def mark_base
+      @base += @offset
+      @offset = 0
+    end
+
     def seek_absolute(offset)
       if offset < 0
         @offset = @buf.size + offset
@@ -31,15 +36,19 @@ class Arcana
       end
     end
 
+    def seek_pos(offset)
+      seek_absolute(@base + offset)
+    end
+
     def seek_relative(offset)
       @offset += offset
     end
 
     def restore
-      previous_offset = @offset
-      ret = yield
-      @offset = previous_offset
-      ret
+      prev = @offset, @base
+      yield
+    ensure
+      @offset, @base = prev
     end
 
     def inspect
@@ -209,6 +218,8 @@ class Arcana
       when "name"
         return false
       when "use"
+        return false
+      when "offset"
         return false
       when "indirect"
         return false # FIXME
@@ -381,15 +392,18 @@ class Arcana
       #return EMPTY_ARRAY unless @offset.exact?
       ruleset = match.ruleset
 
-      input = Input.new(input) unless Input === input
+      input = Cursor.new(input) unless Cursor === input
       @offset.seek(input)
 
       if pattern.type == "use"
         return EMPTY_ARRAY if pattern.value.start_with?("\\^") # FIXME: endianness swap
         use = ruleset.names.fetch(pattern.value)
         puts "use at #{input.offset}"
-        # FIXME: named needs to have offsets relative to this match
-        return use.visit_children(input, match)
+        input.restore do
+          input.mark_base # FIXME: no idea if this works
+          return use.match(input, match)
+        end
+        #return use.visit_children(input, match)
       elsif pattern.type == "indirect"
         # FIXME: do this better
         original_input = input.buf
