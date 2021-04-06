@@ -16,5 +16,3 @@ Similarly to `file`, Arcana is licensed under a [2-Clause BSD License](./LICENSE
 
 * [Marcel](https://github.com/rails/marcel) Pure Ruby MIME type detection using a database derived from Apache Tika
 * [ruby-magic](https://github.com/kwilczynski/ruby-magic) libmagic C bindings for Ruby
-
-## See also
