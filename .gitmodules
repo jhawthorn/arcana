@@ -1,3 +1,4 @@
 [submodule "file"]
 	path = file
 	url = https://github.com/file/file
+	shallow = true
