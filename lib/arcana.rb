@@ -537,6 +537,6 @@ class Arcana
     end
   end
 
-  DB_PATH = "../file/magic/Magdir"
+  DB_PATH = ::File.expand_path("../file/magic/Magdir", __dir__)
   DB = Magdir.new(DB_PATH)
 end
